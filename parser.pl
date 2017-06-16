@@ -6,12 +6,38 @@ use File::Slurp qw(read_file write_file);
 
 #Variables
 my @files = ();
+my %v_ids = ();
 my $DP    = "C:\\Users\\ssadiq\\Documents\\IPL\\data\\";
 $| = 1;
+my $db = "ipl";
+
 &init();
 
+sub execSQL{
+    my $query   = $_[0];
+    my $connect = get_con();
+    my $sth = $connect->prepare($query) or die "Cannot prepare: " . $connect->errstr();
+    $sth->execute() or die "Cannot execute: " . $sth->errstr();
+    $sth->finish();
+}
+sub get_con{
+	my $database = "ipl";
+	my $host     = "localhost";
+	my $user     = "root";
+	my $pw       = "";
+	my $dsn      = "dbi:mysql:$database:$host:3306";
+	my $connect  = DBI->connect($dsn, $user, $pw);
+	unless($connect){
+		print "-E- Fail to connect to server\n";
+		exit 1;
+	}
 
+	return $connect;
+}
+
+#lets start the game
 sub init(){
+    &load_data();
     &load();
     &parse();
 }
@@ -27,9 +53,19 @@ sub load(){
 sub parse(){
     foreach my $f(@files){
         if ($f =~ /.csv/) {
-            print "$f \n";
             my @lines = split("\n",read_file($DP.$f));
-            my %meta  = ();
+            my %meta  = (
+                                'D'  => '',
+                                'C'  => '',
+                                'TW' => '',
+                                'MOM'=> '',
+                                'TD' => '',
+                                'WB' => '',
+                                'W'  => '',
+                                'V'  => '',
+                                'L'  => '',
+                                'WV' => ''        
+                        );
             my $bctr  = 1;
             foreach my $l(@lines){
                 #META DATA Part
@@ -42,6 +78,10 @@ sub parse(){
                     }
                 }elsif($l =~ /venue/){
                     my $venue = (split(",",$l))[2];
+                    if ($venue =~ /^\"/) {
+                        $venue = substr($venue,1);
+                    }
+                    
                     $meta{'V'} = $venue;
                 }elsif($l =~ /toss_winner/){
                     my $toss = (split(",",$l))[2];
@@ -54,15 +94,26 @@ sub parse(){
                     $meta{'MOM'} = $mom;
                 }elsif($l =~ /winner/){
                     if ($l =~ /winner_runs/) {
+                        $meta{'WB'} = "Runs";
                         my $w = (split(",",$l))[2];
-                        $meta{'WR'} = $w;
+                        $meta{'WV'} = $w;
                     }elsif ($l =~ /winner_wickets/) {
+                        $meta{'WB'} = "Wickets";
                         my $w = (split(",",$l))[2];
-                        $meta{'WW'} = $w;
+                        $meta{'WV'} = $w;
                     }else{
                         my $w = (split(",",$l))[2];
                         $meta{'W'} = $w;
                     }   
+                }elsif($l =~ /competition/){
+                        my $c = (split(",",$l))[2];
+                        $meta{'C'} = $c;
+                }elsif($l =~ /date/){
+                        my $d = (split(",",$l))[2];
+                        $meta{'D'} = $d;
+                }elsif($l =~ /city/){
+                        my $lc = (split(",",$l))[2];
+                        $meta{'L'} = $lc;
                 }
                #------------------------------------------------------
                else{
@@ -95,20 +146,66 @@ sub parse(){
                             $wicket = "Y";
                             $w_how  = $det[9];
                         }
-                        
-                        #print "[Ball -> $bctr] [Over -> $det[2]] [On Strike -> $det[4]] [Bowler -> $det[6]] [Non Striker -> $det[5]] [Run's -> $runs] [Action -> $action]\n";
-                        #print "[Ball -> $bctr] [Over -> $det[2]] [Run's -> $runs] [Action -> $action] [Wicket -> $wicket] [Wicket How -> $w_how]\n";
-                        
                         $bctr++;
-                        #print "\n";
-                        #sleep(1);
                     }
-                    
                }
             }
+            
+        #-------------------------------------------------------------------------------------------------
+            
             #print Dumper \%meta;
-            sleep(1);
-            #exit();
+            my $id      = gen_id();
+             my $status = "Complete";
+                if ($meta{'W'} eq "") {
+                    $status = "Abandoned";
+                }
+            my $sel_qry = "SELECT * FROM $db.matches WHERE competition = '$meta{C}' AND city = '$meta{L}' AND date = '$meta{D}' AND team_1 = '$meta{T}{1}' AND team_2 = '$meta{T}{2}' AND toss_winner = '$meta{TW}' AND toss_decision = '$meta{TD}' AND winner = '$meta{W}' AND win_by = '$meta{WB}' AND win_value = '$meta{WV}' AND venue = '$meta{V}' AND mom = '$meta{MOM}'";
+            if (!nr($sel_qry)) {
+                my $ins_query = "INSERT INTO $db.matches VALUES ('$id','$meta{C}','$meta{L}','','$meta{D}','$meta{T}{1}','$meta{T}{2}','$meta{TW}','$meta{TD}','$meta{W}','$meta{WB}','$meta{WV}','$meta{V}','$meta{MOM}','$status')";
+                execSQL($ins_query);
+            }else{
+                my $upd_query = "UPDATE $db.matches SET id='$id',status='$status' WHERE competition = '$meta{C}' AND city = '$meta{L}' AND date = '$meta{D}' AND team_1 = '$meta{T}{1}' AND team_2 = '$meta{T}{2}' AND toss_winner = '$meta{TW}' AND toss_decision = '$meta{TD}' AND winner = '$meta{W}' AND win_by = '$meta{WB}' AND win_value = '$meta{WV}' AND venue = '$meta{V}' AND mom = '$meta{MOM}'";
+                execSQL($upd_query);
+            }
+            
+            #-------------------------------------------------------------------------------------------------
+            #sleep(1);
+           
         }
     }
+}
+#Load the data required
+sub load_data(){
+    my $query   = "SELECT * FROM $db.matches";
+    my $connect = get_con();
+    my $sth = $connect->prepare($query) or die "Cannot prepare: " . $connect->errstr();
+    $sth->execute() or die "Cannot execute: " . $sth->errstr();
+    while(my @row = $sth->fetchrow_array()){
+		$v_ids{$row[0]} = 1;
+	}
+	$sth->finish();
+    
+}
+#Function to generate 8 Digit Unique ID
+sub gen_id(){
+   
+    my @set = ('0' ..'9', 'A' .. 'F');
+    my $id = join '' => map $set[rand @set], 1 .. 8;
+    while (defined($v_ids{$id})) {
+        $id = join '' => map $set[rand @set], 1 .. 8;
+    }
+    return $id;
+}
+#Function for SQL num rows
+sub nr{
+    my $query   = $_[0];
+    my $connect = get_con();
+    my $ctr     = 0;
+    my $sth = $connect->prepare($query) or die "Cannot prepare: " . $connect->errstr();
+    $sth->execute() or die "Cannot execute: " . $sth->errstr();
+    while(my @row = $sth->fetchrow_array()){
+		$ctr++;
+	}
+	$sth->finish();
+    return $ctr;
 }
