@@ -63,12 +63,14 @@ sub parse(){
                                 'WB' => '',
                                 'W'  => '',
                                 'V'  => '',
-                                'L'  => '',
-                                'WV' => ''        
+                                'L'  => 'NA',
+                                'WV' => '',
+                                'ST' => 'Com'
                         );
             my $bctr  = 1;
             foreach my $l(@lines){
                 #META DATA Part
+                $l =~ s/'/''/g;
                 if ($l =~ /team/) {
                     my $team = (split(",",$l))[2];
                     if (! defined $meta{'T'}) {
@@ -77,12 +79,14 @@ sub parse(){
                         $meta{'T'}{2} = $team;
                     }
                 }elsif($l =~ /venue/){
-                    my $venue = (split(",",$l))[2];
-                    if ($venue =~ /^\"/) {
-                        $venue = substr($venue,1);
+                    if ($l !~ /neutralvenue/) {
+                        my $venue = (split(",",$l))[2];
+                        if ($venue =~ /^\"/) {
+                            $venue = substr($venue,1);
+                        }
+                        $meta{'V'} = $venue;
                     }
-                    
-                    $meta{'V'} = $venue;
+
                 }elsif($l =~ /toss_winner/){
                     my $toss = (split(",",$l))[2];
                     $meta{'TW'} = $toss;
@@ -114,6 +118,9 @@ sub parse(){
                 }elsif($l =~ /city/){
                         my $lc = (split(",",$l))[2];
                         $meta{'L'} = $lc;
+                }elsif($l =~ /info,outcome,tie/){
+                        my $st = (split(",",$l))[2];
+                        $meta{'ST'} = $st;
                 }
                #------------------------------------------------------
                else{
@@ -155,16 +162,19 @@ sub parse(){
             
             #print Dumper \%meta;
             my $id      = gen_id();
-             my $status = "Complete";
-                if ($meta{'W'} eq "") {
-                    $status = "Abandoned";
+                if (($meta{'W'} eq "") && ($meta{'ST'} ne "tie")) {
+                    $meta{'ST'} = "Nrs";
                 }
+                
+            if(!defined $meta{'L'}){
+                $meta{'L'} = "NA";
+            }
             my $sel_qry = "SELECT * FROM $db.matches WHERE competition = '$meta{C}' AND city = '$meta{L}' AND date = '$meta{D}' AND team_1 = '$meta{T}{1}' AND team_2 = '$meta{T}{2}' AND toss_winner = '$meta{TW}' AND toss_decision = '$meta{TD}' AND winner = '$meta{W}' AND win_by = '$meta{WB}' AND win_value = '$meta{WV}' AND venue = '$meta{V}' AND mom = '$meta{MOM}'";
             if (!nr($sel_qry)) {
-                my $ins_query = "INSERT INTO $db.matches VALUES ('$id','$meta{C}','$meta{L}','','$meta{D}','$meta{T}{1}','$meta{T}{2}','$meta{TW}','$meta{TD}','$meta{W}','$meta{WB}','$meta{WV}','$meta{V}','$meta{MOM}','$status')";
+                my $ins_query = "INSERT INTO $db.matches VALUES ('$id','$meta{C}','$meta{L}','','$meta{D}','$meta{T}{1}','$meta{T}{2}','$meta{TW}','$meta{TD}','$meta{W}','$meta{WB}','$meta{WV}','$meta{V}','$meta{MOM}','$meta{ST}:$f')";
                 execSQL($ins_query);
             }else{
-                my $upd_query = "UPDATE $db.matches SET id='$id',status='$status' WHERE competition = '$meta{C}' AND city = '$meta{L}' AND date = '$meta{D}' AND team_1 = '$meta{T}{1}' AND team_2 = '$meta{T}{2}' AND toss_winner = '$meta{TW}' AND toss_decision = '$meta{TD}' AND winner = '$meta{W}' AND win_by = '$meta{WB}' AND win_value = '$meta{WV}' AND venue = '$meta{V}' AND mom = '$meta{MOM}'";
+                my $upd_query = "UPDATE $db.matches SET id='$id',status='$meta{ST}:$f' WHERE competition = '$meta{C}' AND city = '$meta{L}' AND date = '$meta{D}' AND team_1 = '$meta{T}{1}' AND team_2 = '$meta{T}{2}' AND toss_winner = '$meta{TW}' AND toss_decision = '$meta{TD}' AND winner = '$meta{W}' AND win_by = '$meta{WB}' AND win_value = '$meta{WV}' AND venue = '$meta{V}' AND mom = '$meta{MOM}'";
                 execSQL($upd_query);
             }
             
