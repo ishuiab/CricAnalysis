@@ -43,7 +43,7 @@ sub init(){
 }
 #Load all the files
 sub load(){
-    opendir my $dir, "C:\\Users\\ssadiq\\Documents\\IPL\\data" or die "Cannot open directory: $!";
+    opendir my $dir, "C:\\Users\\ssadiq\\Documents\\CricAnalysis\\data" or die "Cannot open directory: $!";
         @files = readdir $dir;
     closedir $dir;
 }
@@ -125,10 +125,7 @@ sub parse(){
                #------------------------------------------------------
                else{
                     if (($l !~ /^info/) && ($l !~ /^version/) && (($l =~ /^ball/))) {
-                        
                         my @det = split(",",$l);
-                        #print "$l \n";
-                        
                         my $runs = $det[7]+$det[8];
                         my $action = "";
                         if ($det[7] ne "0") {
@@ -154,8 +151,11 @@ sub parse(){
                             $w_how  = $det[9];
                         }
                         $bctr++;
+                        
+                        print "BALL $bctr ---> ACTION $action WICKET $wicket WHOW --> $w_how RUNS --> $runs\n";
                     }
                }
+               
             }
             
         #-------------------------------------------------------------------------------------------------
@@ -180,9 +180,11 @@ sub parse(){
             
             #-------------------------------------------------------------------------------------------------
             #sleep(1);
-           
+           exit();
         }
+        
     }
+    
 }
 #Load the data required
 sub load_data(){
