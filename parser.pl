@@ -68,6 +68,7 @@ sub parse(){
                                 'ST' => 'Com'
                         );
             my $bctr  = 1;
+            my @balls = ();
             foreach my $l(@lines){
                 #META DATA Part
                 $l =~ s/'/''/g;
@@ -127,6 +128,11 @@ sub parse(){
                     if (($l !~ /^info/) && ($l !~ /^version/) && (($l =~ /^ball/))) {
                         my @det = split(",",$l);
                         my $runs = $det[7]+$det[8];
+                        my $bl   = $det[2];
+                        my $tm   = $det[3];
+                        my $stk  = $det[4]; 
+                        my $ntk  = $det[5];
+                        my $bwl  = $det[6];
                         my $action = "";
                         if ($det[7] ne "0") {
                             if (($det[7] eq "4") || ($det[7] eq "6")) {
@@ -152,16 +158,15 @@ sub parse(){
                         }
                         $bctr++;
                         
-                        print "BALL $bctr ---> ACTION $action WICKET $wicket WHOW --> $w_how RUNS --> $runs\n";
+                        push(@balls,"$tm:$bl:$stk:$ntk:$bwl:$action:$wicket:$w_how:$runs");
                     }
                }
                
             }
             
         #-------------------------------------------------------------------------------------------------
-            
-            #print Dumper \%meta;
             my $id      = gen_id();
+            #print "$id $f \n";
                 if (($meta{'W'} eq "") && ($meta{'ST'} ne "tie")) {
                     $meta{'ST'} = "Nrs";
                 }
@@ -174,17 +179,37 @@ sub parse(){
                 my $ins_query = "INSERT INTO $db.matches VALUES ('$id','$meta{C}','$meta{L}','','$meta{D}','$meta{T}{1}','$meta{T}{2}','$meta{TW}','$meta{TD}','$meta{W}','$meta{WB}','$meta{WV}','$meta{V}','$meta{MOM}','$meta{ST}:$f')";
                 execSQL($ins_query);
             }else{
+                my $o_id = ssql($sel_qry);
                 my $upd_query = "UPDATE $db.matches SET id='$id',status='$meta{ST}:$f' WHERE competition = '$meta{C}' AND city = '$meta{L}' AND date = '$meta{D}' AND team_1 = '$meta{T}{1}' AND team_2 = '$meta{T}{2}' AND toss_winner = '$meta{TW}' AND toss_decision = '$meta{TD}' AND winner = '$meta{W}' AND win_by = '$meta{WB}' AND win_value = '$meta{WV}' AND venue = '$meta{V}' AND mom = '$meta{MOM}'";
                 execSQL($upd_query);
+                my $del_query = "DELETE FROM $db.balls WHERE match_id='$o_id'";
+                execSQL($del_query);
             }
-            
+            #Update Balls
+            push(@balls,$sel_qry);
+            parse_balls(@balls);
             #-------------------------------------------------------------------------------------------------
             #sleep(1);
-           exit();
-        }
-        
+            #exit();
+        }   
     }
-    
+}
+#To parse ball by ball summary
+sub parse_balls(){
+    my @balls = @_;
+    my $qry   = pop(@balls);
+    my $id    = ssql($qry);
+    #First Get the ID
+    if ($id eq "") {
+        print "-W- ID Not Found In Matches Table Not Adding Adding Balls Data\n";
+    }else{
+        print "-I- ID For Match Is $id\n";
+        foreach my $bl(@balls){
+            my @tmp = split(":",$bl);
+            my $ins_query = "INSERT INTO $db.balls VALUES ('$id','$tmp[0]','$tmp[1]','$tmp[2]','$tmp[3]','$tmp[4]','$tmp[5]','$tmp[6]','$tmp[7]','$tmp[8]')";
+            execSQL($ins_query);
+        }
+    }
 }
 #Load the data required
 sub load_data(){
@@ -220,4 +245,18 @@ sub nr{
 	}
 	$sth->finish();
     return $ctr;
+}
+#Function to get first record of from SQL Table
+sub ssql(){
+    my $query   = $_[0];
+    my $connect = get_con();
+    my $ret     = "";
+    my $sth = $connect->prepare($query) or die "Cannot prepare: " . $connect->errstr();
+    $sth->execute() or die "Cannot execute: " . $sth->errstr();
+    while(my @row = $sth->fetchrow_array()){
+		$ret = $row[0];
+        last;
+	}
+	$sth->finish();
+    return $ret;
 }
