@@ -47,8 +47,6 @@ sub load(){
         @files = readdir $dir;
     closedir $dir;
 }
-
-
 #Parse the loaded CSV Files
 sub parse(){
     foreach my $f(@files){
